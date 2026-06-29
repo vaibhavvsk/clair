@@ -1,0 +1,56 @@
+services:
+  # ── Local OCI registry – Clair pulls image layers from here ──────────────
+  registry:
+    image: registry:2
+    container_name: clair-registry
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+
+  # ── PostgreSQL – single DB used by both indexer and matcher ──────────────
+  clair-db:
+    image: postgres:15-alpine
+    container_name: clair-db
+    environment:
+      POSTGRES_USER: clair
+      POSTGRES_PASSWORD: clair
+      POSTGRES_DB: clair
+    volumes:
+      - clair-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clair"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Clair server (combo mode – indexer + matcher in one process) ──────────
+  clair-server:
+    image: quay.io/projectquay/clair:4.9.0
+    container_name: clair-server
+    depends_on:
+      clair-db:
+        condition: service_healthy
+    environment:
+      CLAIR_CONF: /etc/clair/config.yaml
+      CLAIR_MODE: combo
+      # Ensure any raw libpq / pgconn fallback also reaches the right host
+      PGHOST: clair-db
+      PGPORT: "5432"
+      PGUSER: clair
+      PGPASSWORD: clair
+      PGDATABASE: clair
+      PGSSLMODE: disable
+    volumes:
+      - ./clair-config.yaml:/etc/clair/config.yaml:ro
+    ports:
+      - "6060:6060"   # HTTP API  (clairctl talks here)
+      - "8089:8089"   # Introspection / health
+    # Make "localhost" inside the Clair container resolve to the gateway
+    # so it can reach the registry at localhost:5000 just like the host can
+    extra_hosts:
+      - "localhost:172.18.0.1"
+    restart: unless-stopped
+
+volumes:
+  clair-db-data:

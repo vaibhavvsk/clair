@@ -1,0 +1,10 @@
+# Clair CLI binaries (large, download from GitHub releases)
+clairctl-linux-amd64
+clair
+
+# Scan output reports
+clair-report-*.json
+clair-report-*.txt
+clair-report-*.text
+clair-report-*.xml
+

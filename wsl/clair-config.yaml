@@ -1,0 +1,44 @@
+# Clair v4.9.0 – combo mode configuration
+# Both indexer and matcher run in the same process.
+http_listen_addr: "0.0.0.0:6060"
+introspection_addr: "0.0.0.0:8089"
+log_level: info
+
+indexer:
+  connstring: "host=clair-db port=5432 user=clair password=clair dbname=clair sslmode=disable"
+  scanlock_retry: 10
+  layer_scan_concurrency: 5
+  migrations: true
+
+matcher:
+  connstring: "host=clair-db port=5432 user=clair password=clair dbname=clair sslmode=disable"
+  indexer_addr: "http://localhost:6060"
+  max_conn_pool: 100
+  migrations: true
+
+matchers:
+  names:
+    - alpine-matcher
+    - aws-matcher
+    - debian-matcher
+    - gobin
+    - java-maven
+    - oracle
+    - photon
+    - python
+    - rhel
+    - rhel-container-matcher
+    - suse
+    - ubuntu
+
+updaters:
+  sets:
+    - alpine
+    - aws
+    - debian
+    - oracle
+    - osv
+    - rhcc
+    - rhel
+    - suse
+    - ubuntu
