@@ -52,10 +52,18 @@ echo "  ✓  Image pushed."
 
 # ── 4. Run the report ────────────────────────────────────────────────────────
 echo "[4/4] Requesting vulnerability report from Clair..."
-clair report \
-  --host "${CLAIR_API}" \
-  --out  "${FORMAT}" \
-  "${REGISTRY_IMAGE}" | tee "${REPORT_FILE}"
+if [ "$FORMAT" = "json" ]; then
+  # Pretty-print JSON so the saved file is human-readable
+  clair report \
+    --host "${CLAIR_API}" \
+    --out  "${FORMAT}" \
+    "${REGISTRY_IMAGE}" | python3 -m json.tool | tee "${REPORT_FILE}"
+else
+  clair report \
+    --host "${CLAIR_API}" \
+    --out  "${FORMAT}" \
+    "${REGISTRY_IMAGE}" | tee "${REPORT_FILE}"
+fi
 
 echo ""
 echo "══════════════════════════════════════════════════════"

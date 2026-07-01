@@ -1,5 +1,7 @@
 services:
-  # ── Local OCI registry – Clair pulls image layers from here ──────────────
+
+  # ── Local OCI registry ──────────────────────────────────────────────────────
+  # Receives `docker push` from scan.sh. Always running.
   registry:
     image: registry:2
     container_name: clair-registry
@@ -7,7 +9,9 @@ services:
       - "5000:5000"
     restart: unless-stopped
 
-  # ── PostgreSQL – single DB used by both indexer and matcher ──────────────
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  # Shared by the updater (one-shot) and the scan server (permanent).
+  # Vulnerability data persists in the named volume across restarts.
   clair-db:
     image: postgres:15-alpine
     container_name: clair-db
@@ -24,7 +28,75 @@ services:
       retries: 10
     restart: unless-stopped
 
-  # ── Clair server (combo mode – indexer + matcher in one process) ──────────
+  # ── CVE updater ─────────────────────────────────────────────────────────────
+  # One-shot: run on demand or on a schedule to refresh vulnerability data.
+  # It pulls all feeds from the internet, writes them to clair-db, then exits.
+  # Never serves scan requests — no ports exposed.
+  #
+  # Usage:
+  #   docker compose --profile updater run --rm clair-updater
+  #   (or just:  ./mirror.sh refresh)
+  #
+  # After this finishes, run ./mirror.sh dump to snapshot the DB, then
+  # docker compose restart clair-server so it picks up the new data.
+  clair-updater:
+    profiles: [updater]
+    image: quay.io/projectquay/clair:4.9.0
+    container_name: clair-updater
+    depends_on:
+      clair-db:
+        condition: service_healthy
+    environment:
+      CLAIR_CONF: /etc/clair/config.yaml
+      CLAIR_MODE: updater
+      PGHOST: clair-db
+      PGPORT: "5432"
+      PGUSER: clair
+      PGPASSWORD: clair
+      PGDATABASE: clair
+      PGSSLMODE: disable
+    volumes:
+      - ./clair-config-updater.yaml:/etc/clair/config.yaml:ro
+    # No ports — updater mode does not expose an HTTP API
+    restart: "no"
+
+  # ── pg_restore — load vuln-mirror.dump into clair-db ───────────────────────
+  # One-shot: run by ./mirror.sh refresh (after dump is taken) to reload
+  # clair-db from the snapshot so the scan server picks up new CVEs without
+  # ever having to restart or wait for an updater pass.
+  #
+  # Usage (internal — called by mirror.sh):
+  #   docker compose --profile updater run --rm import
+  import:
+    profiles: [updater]
+    image: postgres:15-alpine
+    container_name: clair-import
+    depends_on:
+      clair-db:
+        condition: service_healthy
+    volumes:
+      - ./vuln-mirror.dump:/tmp/vuln-mirror.dump:ro
+    environment:
+      PGPASSWORD: clair
+    command:
+      - sh
+      - -c
+      - |
+        echo '>>> Wiping existing vulnerability data...' &&
+        psql -h clair-db -U clair -d clair -c 'TRUNCATE vuln, uo_vuln, update_operation, updater_status CASCADE;' &&
+        echo '>>> Importing from vuln-mirror.dump...' &&
+        pg_restore -h clair-db -U clair -d clair --data-only --disable-triggers /tmp/vuln-mirror.dump &&
+        echo '>>> Done.' &&
+        psql -h clair-db -U clair -d clair -c 'SELECT COUNT(*) AS imported_vulns FROM vuln;'
+    entrypoint: []
+    restart: "no"
+
+  # ── Clair scan server ───────────────────────────────────────────────────────
+  # Permanent: always running, always offline (updaters disabled).
+  # Serves scan requests on port 6060. Reads vulnerability data from clair-db.
+  # Restart it after ./mirror.sh refresh to pick up the newly loaded CVEs.
+  #
+  # Usage:  docker compose up -d clair-server
   clair-server:
     image: quay.io/projectquay/clair:4.9.0
     container_name: clair-server
@@ -34,7 +106,6 @@ services:
     environment:
       CLAIR_CONF: /etc/clair/config.yaml
       CLAIR_MODE: combo
-      # Ensure any raw libpq / pgconn fallback also reaches the right host
       PGHOST: clair-db
       PGPORT: "5432"
       PGUSER: clair
@@ -42,12 +113,10 @@ services:
       PGDATABASE: clair
       PGSSLMODE: disable
     volumes:
-      - ./clair-config.yaml:/etc/clair/config.yaml:ro
+      - ./clair-config-offline.yaml:/etc/clair/config.yaml:ro
     ports:
-      - "6060:6060"   # HTTP API  (clairctl talks here)
-      - "8089:8089"   # Introspection / health
-    # Make "localhost" inside the Clair container resolve to the gateway
-    # so it can reach the registry at localhost:5000 just like the host can
+      - "6060:6060"
+      - "8089:8089"
     extra_hosts:
       - "localhost:172.18.0.1"
     restart: unless-stopped

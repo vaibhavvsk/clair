@@ -8,3 +8,7 @@ clair-report-*.txt
 clair-report-*.text
 clair-report-*.xml
 
+
+# Vulnerability mirror dumps (large, transfer separately)
+vuln-mirror.dump
+vuln-db.gz

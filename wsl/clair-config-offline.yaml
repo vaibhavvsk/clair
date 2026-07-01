@@ -1,5 +1,6 @@
-# Clair v4.9.0 – combo mode configuration
-# Both indexer and matcher run in the same process.
+# Clair v4.9.0 — OFFLINE mode configuration
+# Live updaters are disabled. Vulnerability data must be pre-loaded
+# via pg_restore from a vuln-mirror.dump file.
 http_listen_addr: "0.0.0.0:6060"
 introspection_addr: "0.0.0.0:8089"
 log_level: info
@@ -13,8 +14,9 @@ indexer:
 matcher:
   connstring: "host=clair-db port=5432 user=clair password=clair dbname=clair sslmode=disable"
   indexer_addr: "http://localhost:6060"
-  max_conn_pool: 100
   migrations: true
+  # Disable live updater runs entirely
+  disable_updaters: true
 
 matchers:
   names:
@@ -31,14 +33,6 @@ matchers:
     - suse
     - ubuntu
 
+# Empty sets = no updaters run at startup
 updaters:
-  sets:
-    - alpine
-    - aws
-    - debian
-    - oracle
-    - osv
-    - rhcc
-    - rhel
-    - suse
-    - ubuntu
+  sets: []

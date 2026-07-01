@@ -1,0 +1,30 @@
+# clairctl.yaml — configuration for clairctl offline commands
+#
+# Used by:
+#   clair -c clairctl.yaml export-updaters  <file.gz>
+#   clair -c clairctl.yaml import-updaters  <file.gz>
+#
+# export-updaters: fetches vulnerability feeds from the internet and writes
+#   them to a portable JSON blob — no running Clair server needed.
+#
+# import-updaters: reads a previously exported blob and loads it directly
+#   into the PostgreSQL DB via matcher.connstring — no running Clair server
+#   needed, but clair-db must be running.
+
+# Matcher connstring is what import-updaters uses to write to the DB.
+matcher:
+  connstring: "host=localhost port=5432 user=clair password=clair dbname=clair sslmode=disable"
+
+# Updater sets to include in the export.
+# Remove any set you don't need to keep the file smaller.
+updaters:
+  sets:
+    - alpine
+    - aws
+    - debian
+    - oracle
+    - osv
+    - rhcc
+    - rhel
+    - suse
+    - ubuntu

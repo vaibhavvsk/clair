@@ -1,0 +1,26 @@
+# Clair v4.9.0 — UPDATER mode configuration
+#
+# Used exclusively by the one-shot `clair-updater` container.
+# This container fetches all CVE feeds from the internet, writes them to
+# clair-db, then exits. It does NOT serve any HTTP scan requests.
+#
+# Triggered by:  ./mirror.sh refresh
+# Never use this config for the permanent scan server.
+
+log_level: info
+
+matcher:
+  connstring: "host=clair-db port=5432 user=clair password=clair dbname=clair sslmode=disable"
+  migrations: true
+
+updaters:
+  sets:
+    - alpine
+    - aws
+    - debian
+    - oracle
+    - osv
+    - rhcc
+    - rhel
+    - suse
+    - ubuntu
